@@ -556,6 +556,16 @@
     let activeFilter = 'all';
     let firstLoad   = true;
 
+    // ── MOCK DATA (للاختبار إذا فشل الـ API) ───────────────────────────────
+    const MOCK_DATA = [
+      { home_team:'ريال مدريد', away_team:'برشلونة',    score:'2 - 1', status:'مباشر', datetime:'13/04/2026 - 21:00', league:'الدوري الإسباني', minute:'67' },
+      { home_team:'مانشستر سيتي', away_team:'ليفربول',  score:'0 - 0', status:'مباشر', datetime:'13/04/2026 - 20:45', league:'الدوري الإنجليزي', minute:'34' },
+      { home_team:'بايرن ميونخ', away_team:'دورتموند',  score:'3 - 2', status:'انتهت', datetime:'13/04/2026 - 18:30', league:'الدوري الألماني', minute:'' },
+      { home_team:'يوفنتوس',    away_team:'إنتر ميلان', score:'1 - 1', status:'انتهت', datetime:'13/04/2026 - 17:00', league:'الدوري الإيطالي', minute:'' },
+      { home_team:'باريس سان جيرمان', away_team:'مرسيليا', score:'2 - 0', status:'مباشر', datetime:'13/04/2026 - 21:00', league:'الدوري الفرنسي', minute:'78' },
+      { home_team:'الاتحاد',    away_team:'الهلال',     score:'1 - 2', status:'انتهت', datetime:'12/04/2026 - 19:00', league:'دوري روشن السعودي', minute:'' },
+    ];
+
     // ── TEAM EMOJIS (fallback) ──────────────────────────────────────────────
     const EMOJI_POOL = ['🦁','🐯','🦅','🐺','🦊','🐻','🦂','🦬','🐉','🦄','🌟','⚡'];
     const emojiCache = {};
@@ -690,7 +700,11 @@
     // ── FETCH ────────────────────────────────────────────────────────────────
     async function fetchData() {
       try {
-        const res  = await fetch(API_URL + '?limit=100&sheet=Sheet1', { cache: 'no-store' });
+        const res  = await fetch(API_URL, {
+          cache: 'no-store',
+          mode: 'cors',
+          headers: { 'Accept': 'application/json' }
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
@@ -717,13 +731,19 @@
 
       } catch (err) {
         console.error('Fetch error:', err);
-        const container = document.getElementById('matchesContainer');
-        const skeleton  = document.getElementById('skeletonGrid');
+        const skeleton = document.getElementById('skeletonGrid');
         if (skeleton) skeleton.remove();
-        container.innerHTML = `
-          <div class="error-state">
-            <p>⚠️ تعذّر تحميل البيانات — يُعاد المحاولة تلقائياً…</p>
-          </div>`;
+
+        // If no data yet, load mock data so UI is usable
+        if (!allMatches.length) {
+          allMatches = MOCK_DATA;
+          const liveC  = allMatches.filter(m => m.status === 'مباشر').length;
+          document.getElementById('totalCount').textContent = allMatches.length + ' (تجريبي)';
+          document.getElementById('liveCount').textContent  = liveC;
+          document.getElementById('endedCount').textContent = allMatches.length - liveC;
+          applyFilter(activeFilter);
+        }
+        document.getElementById('lastUpdated').textContent = '⚠️ فشل الاتصال بـ API — بيانات تجريبية';
       }
     }
 
