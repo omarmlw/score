@@ -79,7 +79,7 @@
     .ss{font-family:var(--fe);font-size:1.65rem;font-weight:300;color:var(--sub);line-height:1}
     .mlbl{font-size:.69rem;color:var(--sub);font-family:var(--fe);margin-top:.08rem}
     .mc.live .mlbl{color:var(--red);font-weight:600}
-    .cf{display:flex;align-items:center;padding:.52rem 1rem .65rem;border-top:1px solid var(--border)}
+    .cf{padding:.52rem 1rem .65rem;border-top:1px solid var(--border)}
     .dt{display:flex;align-items:center;gap:.38rem;font-size:.73rem;color:var(--sub)}
     .sk{background:var(--card);border:1px solid var(--border);border-radius:16px;height:174px;overflow:hidden;position:relative}
     .sk::after{content:'';position:absolute;inset:0;
@@ -87,8 +87,7 @@
     @keyframes sh{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
     .empty{grid-column:1/-1;text-align:center;padding:4.5rem 2rem;color:var(--sub)}
     .empty .ico{font-size:2.6rem;margin-bottom:.7rem}
-    ::-webkit-scrollbar{width:5px}
-    ::-webkit-scrollbar-track{background:var(--bg)}
+    ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--bg)}
     ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
   </style>
 </head>
@@ -122,42 +121,80 @@
   </div>
 </main>
 <script>
-const API='https://sheetdb.io/api/v1/uyktjb2tkvipj';
-const TICK=2000;
-let allData=[],activeFilter='all',firstRender=true;
+// ═══ CONFIG ════════════════════════════════════════════
+const SHEET_ID = '1eG9XRAHv8Fn-tkFmEsbN1xPg7j7bi_4xo69rOyw5WPw';
+const TICK     = 2000;
 
+// ═══ STATE ═════════════════════════════════════════════
+let allData = [], activeFilter = 'all';
+
+// ═══ GOOGLE SHEETS READER (gviz — no API key, no CORS) ═
+async function readSheet() {
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&t=${Date.now()}`;
+  const r   = await fetch(url);
+  const txt = await r.text();
+  // gviz wraps JSON in:  /*O_o*/\ngoogle.visualization.Query.setResponse({...});
+  const json = JSON.parse(txt.replace(/^[^(]+\(/, '').replace(/\);?\s*$/, ''));
+  return parseGviz(json);
+}
+
+function parseGviz(json) {
+  const cols = json.table.cols.map(c => c.label.trim().toLowerCase());
+  const rows = json.table.rows || [];
+
+  return rows.map(row => {
+    const obj = {};
+    row.c.forEach((cell, i) => {
+      const key = cols[i] || `col${i}`;
+      obj[key]  = cell ? (cell.v !== null && cell.v !== undefined ? String(cell.v) : '') : '';
+    });
+    return obj;
+  }).filter(r => Object.values(r).some(v => v.trim()));
+}
+
+// ═══ HELPERS ═══════════════════════════════════════════
 const EMOJIS=['🦁','🐯','🦅','🐺','🦊','🐻','🦂','🦬','🐉','🦄','🌟','⚡'];
 const EC={};
 function emo(n){if(!EC[n]){let h=0;for(let i=0;i<n.length;i++)h=Math.imul(31,h)+n.charCodeAt(i)|0;EC[n]=EMOJIS[Math.abs(h)%EMOJIS.length]}return EC[n]}
+
 function lgIco(l=''){
   const s=l.toLowerCase();
   if(s.includes('premier')||s.includes('انجليزي'))return'🏴󠁧󠁢󠁥󠁮󠁧󠁿';
-  if(s.includes('laliga')||s.includes('اسباني'))return'🇪🇸';
+  if(s.includes('laliga')||s.includes('اسباني')) return'🇪🇸';
   if(s.includes('bundesliga')||s.includes('الماني'))return'🇩🇪';
-  if(s.includes('serie')||s.includes('ايطالي'))return'🇮🇹';
-  if(s.includes('ligue')||s.includes('فرنسي'))return'🇫🇷';
+  if(s.includes('serie')||s.includes('ايطالي')) return'🇮🇹';
+  if(s.includes('ligue')||s.includes('فرنسي'))  return'🇫🇷';
   if(s.includes('champion')||s.includes('ابطال'))return'⭐';
   if(s.includes('جزائري')||s.includes('algerie'))return'🇩🇿';
-  if(s.includes('سعودي')||s.includes('روشن'))return'🇸🇦';
+  if(s.includes('سعودي')||s.includes('روشن'))   return'🇸🇦';
   return'🏆';
 }
-function rowId(m,i){return String(m.id||m.rowid||m.row_id||i)}
-function ex(m){return{
-  home:m.home_team||m.الفريق_الاول||m.team1||'الفريق الأول',
-  away:m.away_team||m.الفريق_الثاني||m.team2||'الفريق الثاني',
-  score:m.score||m.النتيجة||'0 - 0',
-  status:(m.status||m.الحالة||'انتهت').trim(),
-  dt:m.datetime||m.التاريخ||m.date||'',
-  league:m.league||m.الدوري||m.competition||'',
-  minute:m.minute||m.الدقيقة||'',
-}}
 
-function buildCard(m,idx,rid,isNew){
-  const{home,away,score,status,dt,league,minute}=ex(m);
-  const isLive=status==='مباشر';
-  const p=score.replace(/\s/g,'').split('-');
-  const s1=p[0]||'0',s2=p[1]||'0';
-  const minDisp=isLive&&minute?minute+"'":isLive?'مباشر':'انتهت';
+// Normalize column names (Arabic or English)
+function ex(m) {
+  const k = Object.keys(m);
+  const g = (opts) => { for(const o of opts){ const f=k.find(x=>x.includes(o)); if(f&&m[f]?.trim()) return m[f].trim(); } return ''; };
+  return {
+    home:   g(['home_team','home','الفريق_الاول','الاول','team1','فريق1']) || 'الفريق الأول',
+    away:   g(['away_team','away','الفريق_الثاني','الثاني','team2','فريق2']) || 'الفريق الثاني',
+    score:  g(['score','النتيجة','result','نتيجة']) || '0 - 0',
+    status: g(['status','الحالة','حالة']) || 'انتهت',
+    dt:     g(['datetime','date','التاريخ','تاريخ','time','وقت']),
+    league: g(['league','الدوري','دوري','competition','بطولة']),
+    minute: g(['minute','الدقيقة','دقيقة','min','وقت_اللعب']),
+    id:     g(['id','row','رقم']) || '',
+  };
+}
+
+function rowKey(m, i) { return ex(m).id || String(i); }
+
+// ═══ RENDER ════════════════════════════════════════════
+function buildCard(m, idx, rid, isNew) {
+  const {home,away,score,status,dt,league,minute} = ex(m);
+  const isLive = status === 'مباشر';
+  const p  = score.replace(/\s/g,'').split('-');
+  const s1 = p[0]||'0', s2 = p[1]||'0';
+  const minDisp = isLive && minute ? minute+"'" : isLive ? 'مباشر' : 'انتهت';
   return `<div class="mc${isLive?' live':''}${isNew?' new-in':''}" data-id="${rid}"${isNew?` style="animation-delay:${idx*55}ms"`:''}>
   <div class="stripe"></div>
   <div class="ch">
@@ -182,86 +219,86 @@ function buildCard(m,idx,rid,isNew){
 </div>`;
 }
 
-function patchCard(el,m){
-  const{score,status,minute}=ex(m);
-  const isLive=status==='مباشر';
-  const p=score.replace(/\s/g,'').split('-');
-  const s1=p[0]||'0',s2=p[1]||'0';
-  const n1=el.querySelector('[data-role=s1]'),n2=el.querySelector('[data-role=s2]');
-  if(n1&&n1.textContent!==s1){n1.textContent=s1;flash(n1)}
-  if(n2&&n2.textContent!==s2){n2.textContent=s2;flash(n2)}
-  el.classList.toggle('live',isLive);
-  const sb=el.querySelector('.sbadge');
+function patchCard(el, m) {
+  const {score,status,minute} = ex(m);
+  const isLive = status === 'مباشر';
+  const p  = score.replace(/\s/g,'').split('-');
+  const s1 = p[0]||'0', s2 = p[1]||'0';
+  const n1 = el.querySelector('[data-role=s1]'), n2 = el.querySelector('[data-role=s2]');
+  if(n1 && n1.textContent !== s1){ n1.textContent=s1; flash(n1); }
+  if(n2 && n2.textContent !== s2){ n2.textContent=s2; flash(n2); }
+  el.classList.toggle('live', isLive);
+  const sb = el.querySelector('.sbadge');
   if(sb){
-    sb.className='sbadge '+(isLive?'live':'ended');
-    const dot=sb.querySelector('.ld');
-    if(isLive&&!dot)sb.insertAdjacentHTML('afterbegin','<div class="ld"></div>');
-    if(!isLive)dot?.remove();
-    const tn=[...sb.childNodes].find(n=>n.nodeType===3);
-    if(tn)tn.textContent=status;else sb.append(document.createTextNode(status));
+    sb.className = 'sbadge '+(isLive?'live':'ended');
+    const dot = sb.querySelector('.ld');
+    if(isLive&&!dot) sb.insertAdjacentHTML('afterbegin','<div class="ld"></div>');
+    if(!isLive) dot?.remove();
+    const tn = [...sb.childNodes].find(n=>n.nodeType===3);
+    if(tn) tn.textContent=status; else sb.append(document.createTextNode(status));
   }
-  const lbl=el.querySelector('[data-role=min]');
-  if(lbl)lbl.textContent=isLive&&minute?minute+"'":isLive?'مباشر':'انتهت';
+  const lbl = el.querySelector('[data-role=min]');
+  if(lbl) lbl.textContent = isLive&&minute ? minute+"'" : isLive ? 'مباشر' : 'انتهت';
 }
 
-function flash(el){el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),620)}
+function flash(el){ el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),620); }
 
 function render(matches){
-  const grid=document.getElementById('grid');
+  const grid = document.getElementById('grid');
   grid.querySelectorAll('.sk').forEach(s=>s.remove());
-  if(!matches.length){grid.innerHTML=`<div class="empty"><div class="ico">⚽</div><p>لا توجد مباريات</p></div>`;return}
-  const dom={};
-  grid.querySelectorAll('.mc[data-id]').forEach(c=>{dom[c.dataset.id]=c});
-  const needed=new Set(matches.map((m,i)=>rowId(m,i)));
-  for(const id in dom){if(!needed.has(id))dom[id].remove()}
+  if(!matches.length){ grid.innerHTML=`<div class="empty"><div class="ico">⚽</div><p>لا توجد مباريات</p></div>`; return; }
+  const dom = {};
+  grid.querySelectorAll('.mc[data-id]').forEach(c=>{ dom[c.dataset.id]=c; });
+  const needed = new Set(matches.map((m,i)=>rowKey(m,i)));
+  for(const id in dom){ if(!needed.has(id)) dom[id].remove(); }
   matches.forEach((m,idx)=>{
-    const rid=rowId(m,idx);
-    if(dom[rid]){patchCard(dom[rid],m)}
-    else{
-      const tmp=document.createElement('div');
-      tmp.innerHTML=buildCard(m,idx,rid,true).trim();
-      const newEl=tmp.firstChild;
-      const cards=[...grid.querySelectorAll('.mc')];
-      if(idx>=cards.length)grid.appendChild(newEl);else grid.insertBefore(newEl,cards[idx]);
+    const rid = rowKey(m,idx);
+    if(dom[rid]){ patchCard(dom[rid],m); }
+    else {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = buildCard(m,idx,rid,true).trim();
+      const newEl  = tmp.firstChild;
+      const cards  = [...grid.querySelectorAll('.mc')];
+      if(idx>=cards.length) grid.appendChild(newEl); else grid.insertBefore(newEl,cards[idx]);
     }
   });
 }
 
 function applyFilter(f){
-  activeFilter=f;
-  let list=allData;
-  if(f==='live')list=allData.filter(m=>ex(m).status==='مباشر');
-  if(f==='ended')list=allData.filter(m=>ex(m).status!=='مباشر');
+  activeFilter = f;
+  let list = allData;
+  if(f==='live')  list = allData.filter(m=>ex(m).status==='مباشر');
+  if(f==='ended') list = allData.filter(m=>ex(m).status!=='مباشر');
   render(list);
 }
 
 document.querySelectorAll('.tab').forEach(b=>{
   b.addEventListener('click',()=>{
     document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
-    b.classList.add('on');applyFilter(b.dataset.f);
+    b.classList.add('on'); applyFilter(b.dataset.f);
   });
 });
 
+// ═══ FETCH LOOP ════════════════════════════════════════
 async function fetchData(){
   try{
-    const r=await fetch(API,{cache:'no-store',mode:'cors',headers:{'Accept':'application/json'}});
-    if(!r.ok)throw new Error(`HTTP ${r.status}`);
-    const d=await r.json();
-    allData=Array.isArray(d)?d:(d.data||[]);
-    const lc=allData.filter(m=>ex(m).status==='مباشر').length;
-    document.getElementById('cAll').textContent=allData.length;
-    document.getElementById('cLive').textContent=lc;
-    document.getElementById('cEnd').textContent=allData.length-lc;
-    document.getElementById('upd').textContent='آخر تحديث '+new Date().toLocaleTimeString('ar-DZ',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    applyFilter(activeFilter);firstRender=false;
-  }catch(e){
-    console.warn(e);
-    if(!allData.length){document.getElementById('grid').innerHTML=`<div class="empty"><div class="ico">⚠️</div><p>تعذّر تحميل البيانات</p></div>`}
-    document.getElementById('upd').textContent='⚠️ فشل الاتصال';
+    const data = await readSheet();
+    allData = data;
+    const lc = allData.filter(m=>ex(m).status==='مباشر').length;
+    document.getElementById('cAll').textContent  = allData.length;
+    document.getElementById('cLive').textContent = lc;
+    document.getElementById('cEnd').textContent  = allData.length - lc;
+    document.getElementById('upd').textContent   = 'آخر تحديث ' + new Date().toLocaleTimeString('ar-DZ',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    applyFilter(activeFilter);
+  } catch(e){
+    console.error('fetch error:', e);
+    document.getElementById('upd').textContent = '⚠️ تحقق من إعدادات الـ Sheet';
+    if(!allData.length) document.getElementById('grid').innerHTML = `<div class="empty"><div class="ico">⚠️</div><p>تأكد أن الـ Sheet مشارك للعموم</p></div>`;
   }
 }
+
 fetchData();
-setInterval(fetchData,TICK);
+setInterval(fetchData, TICK);
 </script>
 </body>
 </html>
