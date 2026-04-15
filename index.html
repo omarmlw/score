@@ -3,32 +3,73 @@
 <head>
 <meta charset="UTF-8">
 <title>حالة المحل</title>
+
 <style>
-body { text-align:center; font-family:Arial; margin-top:100px; }
-.status { font-size:40px; font-weight:bold; }
-.open { color:green; }
-.closed { color:red; }
+body{
+  font-family:Arial;
+  text-align:center;
+  margin-top:100px;
+  background:#f4f4f4;
+}
+
+.card{
+  background:white;
+  width:300px;
+  margin:auto;
+  padding:40px;
+  border-radius:20px;
+  box-shadow:0 10px 25px rgba(0,0,0,0.1);
+}
+
+.status{
+  font-size:32px;
+  font-weight:bold;
+}
+
+.open{color:green;}
+.closed{color:red;}
 </style>
 </head>
+
 <body>
 
-<div id="status" class="status">جاري التحميل...</div>
+<div class="card">
+  <div id="status">جاري التحميل...</div>
+</div>
 
 <script>
-fetch("https://sheetdb.io/api/v1/uyktjb2tkvipj")
-.then(res => res.json())
-.then(data => {
-  let s = data[0].status;
+
+const sheetID = "1eG9XRAHv8Fn-tkFmEsbN1xPg7j7bi_4xo69rOyw5WPw";
+
+function loadStatus(){
+
+fetch(`https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json`)
+.then(res => res.text())
+.then(text => {
+
+  let json = JSON.parse(
+    text.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\)/)[1]
+  );
+
+  let value = json.table.rows[0].c[0].v;
+
   let el = document.getElementById("status");
 
-  if(s === "open"){
+  if(value === "open"){
     el.innerHTML = "🟢 المحل مفتوح الآن";
     el.className = "status open";
   } else {
     el.innerHTML = "🔴 المحل مغلق حالياً";
     el.className = "status closed";
   }
+
 });
+
+}
+
+loadStatus();
+setInterval(loadStatus, 5000);
+
 </script>
 
 </body>
