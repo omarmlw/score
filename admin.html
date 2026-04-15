@@ -3,39 +3,56 @@
 <head>
 <meta charset="UTF-8">
 <title>لوحة التحكم</title>
+
 <style>
-body { text-align:center; font-family:Arial; margin-top:100px; }
-button {
+body{
+  font-family:Arial;
+  text-align:center;
+  margin-top:100px;
+}
+
+button{
   padding:20px;
   font-size:20px;
   margin:10px;
+  border:none;
+  border-radius:10px;
   cursor:pointer;
 }
+
+.open{background:green;color:white;}
+.closed{background:red;color:white;}
 </style>
 </head>
+
 <body>
 
-<h2>تبديل حالة المحل</h2>
+<h2>لوحة التحكم</h2>
 
-<button onclick="setStatus('open')">🟢 فتح</button>
-<button onclick="setStatus('closed')">🔴 غلق</button>
+<button class="open" onclick="setStatus('open')">🟢 فتح</button>
+<button class="closed" onclick="setStatus('closed')">🔴 غلق</button>
 
 <script>
-function setStatus(val){
-  fetch("https://sheetdb.io/api/v1/uyktjb2tkvipj/status/1", {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      data: { status: val }
-    })
+
+function setStatus(value){
+
+fetch("https://sheetdb.io/api/v1/uyktjb2tkvipj/status/1", {
+  method: "PATCH",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    data: {
+      status: value
+    }
   })
-  .then(res => res.json())
-  .then(() => {
-    alert("تم التحديث ✅");
-  });
+})
+.then(() => {
+  alert("تم التحديث ✅");
+});
+
 }
+
 </script>
 
 </body>
